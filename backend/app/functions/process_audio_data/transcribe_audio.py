@@ -67,7 +67,13 @@ alignment_models_cache = {}
 
 # 1. Load models
 transcription_model = load_transcription_model()
-diarize_model = load_diarize_model()
+# Diarization needs a gated Hugging Face model. Keep the API up when the token
+# is absent; speaker labels are skipped until HF_TOKEN is configured.
+diarize_model = None
+if settings.hf_token:
+    diarize_model = load_diarize_model()
+else:
+    print("HF_TOKEN is not set. Starting without speaker diarization.")
 print("Models loaded successfully.")
 
 
@@ -160,11 +166,13 @@ async def transcribe_audio(audio_bytes: bytes, content_type: str, batch_size=16)
         print(f"min players: {min_players}")
         print(f"max players: {max_players}")
 
-        # Perform diarization with constraints
-        diarizeSegments = diarize_model(audio, min_speakers=min_players, max_speakers=max_players)
-
-        # Assign speakers to the aligned segments
-        resultB = whisperx.assign_word_speakers(diarizeSegments, resultA)
+        # Perform diarization with constraints when the model is available.
+        if diarize_model is None:
+            print("Speaker diarization unavailable because HF_TOKEN is not set.")
+            resultB = resultA
+        else:
+            diarizeSegments = diarize_model(audio, min_speakers=min_players, max_speakers=max_players)
+            resultB = whisperx.assign_word_speakers(diarizeSegments, resultA)
 
         # print("Diarization segments:", diarizeSegments)
 
